@@ -27,19 +27,14 @@ var analyzer = &analysis.Analyzer{
 	Run:      run,
 }
 
-func run(pass *analysis.Pass) (interface{}, error) {
-	ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
-
-	// Создаём кэш для путей файлов
+// filterFiles фильтрует файлы согласно конфигурации
+func filterFiles(pass *analysis.Pass) map[string]bool {
 	pathCache := make(map[string]string)
-
-	// Фильтруем файлы согласно конфигурации
-	filteredFilePaths := make(map[string]bool) // Для быстрого поиска по абсолютному пути
+	filteredFilePaths := make(map[string]bool)
 
 	for _, file := range pass.Files {
 		filename := pass.Fset.Position(file.Pos()).Filename
 
-		// Проверяем кэш путей
 		var relPath string
 		if cached, ok := pathCache[filename]; ok {
 			relPath = cached
@@ -49,12 +44,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			if err != nil {
 				relPath = filename
 			}
-			// Нормализуем разделители путей для консистентности
 			relPath = strings.ReplaceAll(relPath, "\\", "/")
 			pathCache[filename] = relPath
 		}
 
-		// Пропускаем файлы согласно конфигурации из относительного пути
 		if cfg.ShouldIgnore(relPath) {
 			if verbose {
 				fmt.Fprintf(os.Stderr, "[DEBUG] Skipping file: %s\n", relPath)
@@ -68,6 +61,218 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		filteredFilePaths[filename] = true
 	}
 
+	return filteredFilePaths
+}
+
+// hasNoLintComment проверяет наличие комментария //nolint:error_log_or_return
+func hasNoLintComment(fn *ast.FuncDecl, pass *analysis.Pass) bool {
+	if fn.Doc != nil {
+		for _, cg := range fn.Doc.List {
+			if strings.Contains(cg.Text, nolint) {
+				return true
+			}
+		}
+	}
+
+	var astFile *ast.File
+	for _, f := range pass.Files {
+		if fn.Pos() >= f.Pos() && fn.Pos() <= f.End() {
+			astFile = f
+			break
+		}
+	}
+	if astFile != nil {
+		file := pass.Fset.File(fn.Pos())
+		funcLine := file.Line(fn.Pos())
+		for _, cg := range astFile.Comments {
+			for _, c := range cg.List {
+				commentLine := file.Line(c.Pos())
+				if commentLine == funcLine && strings.Contains(c.Text, nolint) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// getReceiverName получает имя ресивера функции
+func getReceiverName(fn *ast.FuncDecl) string {
+	if fn.Recv != nil && len(fn.Recv.List) > 0 && len(fn.Recv.List[0].Names) > 0 {
+		return fn.Recv.List[0].Names[0].Name
+	}
+	return ""
+}
+
+// returnsError проверяет, возвращает ли функция error
+func returnsError(fn *ast.FuncDecl) bool {
+	if fn.Type.Results == nil {
+		return false
+	}
+	for _, res := range fn.Type.Results.List {
+		if types.ExprString(res.Type) == "error" {
+			return true
+		}
+	}
+	return false
+}
+
+// hasErrorVariable проверяет наличие переменной err типа error на уровне функции
+func hasErrorVariable(fn *ast.FuncDecl, pass *analysis.Pass) bool {
+	for _, stmt := range fn.Body.List {
+		if hasErrorInDeclStmt(stmt, pass) || hasErrorInAssignStmt(stmt, pass) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasErrorInDeclStmt проверяет объявление var err error
+func hasErrorInDeclStmt(stmt ast.Stmt, pass *analysis.Pass) bool {
+	decl, ok := stmt.(*ast.DeclStmt)
+	if !ok {
+		return false
+	}
+
+	gen, ok := decl.Decl.(*ast.GenDecl)
+	if !ok || gen.Tok != token.VAR {
+		return false
+	}
+
+	for _, spec := range gen.Specs {
+		vs, ok := spec.(*ast.ValueSpec)
+		if !ok {
+			continue
+		}
+
+		for i, name := range vs.Names {
+			if name.Name != "err" {
+				continue
+			}
+
+			if vs.Type != nil {
+				if ident, ok := vs.Type.(*ast.Ident); ok && ident.Name == "error" {
+					return true
+				}
+			} else if len(vs.Values) > i {
+				typ := pass.TypesInfo.TypeOf(vs.Values[i])
+				if typ != nil && typ.String() == "error" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// hasErrorInAssignStmt проверяет короткое объявление err := ...
+func hasErrorInAssignStmt(stmt ast.Stmt, pass *analysis.Pass) bool {
+	assign, ok := stmt.(*ast.AssignStmt)
+	if !ok || assign.Tok != token.DEFINE {
+		return false
+	}
+
+	for _, lhs := range assign.Lhs {
+		ident, ok := lhs.(*ast.Ident)
+		if !ok || ident.Name != "err" {
+			continue
+		}
+
+		if obj := pass.TypesInfo.Defs[ident]; obj != nil {
+			if obj.Type().String() == "error" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasDeferWithErrorRef проверяет наличие defer с &err
+func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool {
+	hasDeferWithErr := false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		deferStmt, ok := n.(*ast.DeferStmt)
+		if !ok {
+			return true
+		}
+
+		call, ok := deferStmt.Call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		xSel, ok := call.X.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		recvIdent, ok := xSel.X.(*ast.Ident)
+		if !ok || recvIdent.Name != recvName {
+			return true
+		}
+
+		if xSel.Sel.Name != "log" {
+			return true
+		}
+
+		if !strings.HasPrefix(call.Sel.Name, "ErrorOr") &&
+			!strings.HasPrefix(call.Sel.Name, "Error") &&
+			!strings.HasPrefix(call.Sel.Name, "Debug") {
+			return true
+		}
+
+		if len(deferStmt.Call.Args) > 0 {
+			if starExpr, ok := deferStmt.Call.Args[0].(*ast.UnaryExpr); ok && starExpr.Op == token.AND {
+				if ident, ok := starExpr.X.(*ast.Ident); ok && ident.Name == "err" {
+					hasDeferWithErr = true
+				}
+			}
+		}
+		return true
+	})
+	return hasDeferWithErr
+}
+
+// checkFunctionViolations проверяет нарушения правил для функции
+func checkFunctionViolations(fn *ast.FuncDecl, pass *analysis.Pass, filteredFilePaths map[string]bool) {
+	fnFile := pass.Fset.Position(fn.Pos()).Filename
+	if !filteredFilePaths[fnFile] {
+		return
+	}
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Processing function at %s\n", fnFile)
+	}
+
+	if hasNoLintComment(fn, pass) {
+		return
+	}
+
+	recvName := getReceiverName(fn)
+	if recvName == "" {
+		return // Только методы с ресивером
+	}
+
+	returnsErr := returnsError(fn)
+	hasErrVar := hasErrorVariable(fn, pass)
+	hasDeferWithErr := hasDeferWithErrorRef(fn, recvName)
+
+	// Нарушение: если функция не возвращает error, объявлен var err error, но нет defer с &err
+	if !returnsErr && hasErrVar && !hasDeferWithErr {
+		pass.Reportf(fn.Pos(), "есть err, нет defer, нет возврата error")
+	}
+
+	// Нарушение: если функция возвращает error и есть defer с &err
+	if returnsErr && hasDeferWithErr {
+		pass.Reportf(fn.Pos(), "возвращает error и есть defer с &err")
+	}
+}
+
+func run(pass *analysis.Pass) (interface{}, error) {
+	ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	filteredFilePaths := filterFiles(pass)
+
 	nodeFilter := []ast.Node{(*ast.FuncDecl)(nil)}
 	ins.Preorder(nodeFilter, func(n ast.Node) {
 		fn, ok := n.(*ast.FuncDecl)
@@ -75,167 +280,9 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			return
 		}
 
-		// Проверяем, находится ли функция в одном из отфильтрованных файлов
-		fnFile := pass.Fset.Position(fn.Pos()).Filename
-		if !filteredFilePaths[fnFile] {
-			return
-		}
-		if verbose {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Processing function at %s\n", fnFile)
-		}
-
-		// Проверяем, есть ли //nolint:error_log_or_return в комментариях к функции (doc или end-of-line)
-		hasNoLint := false
-		if fn.Doc != nil {
-			for _, cg := range fn.Doc.List {
-				if strings.Contains(cg.Text, nolint) {
-					hasNoLint = true
-					break
-				}
-			}
-		}
-		// Проверяем end-of-line комментарии на строке сигнатуры функции
-		if !hasNoLint {
-			var astFile *ast.File
-			for _, f := range pass.Files {
-				if fn.Pos() >= f.Pos() && fn.Pos() <= f.End() {
-					astFile = f
-					break
-				}
-			}
-			if astFile != nil {
-				file := pass.Fset.File(fn.Pos())
-				funcLine := file.Line(fn.Pos())
-				for _, cg := range astFile.Comments {
-					for _, c := range cg.List {
-						commentLine := file.Line(c.Pos())
-						if commentLine == funcLine && strings.Contains(c.Text, nolint) {
-							hasNoLint = true
-							break
-						}
-					}
-					if hasNoLint {
-						break
-					}
-				}
-			}
-		}
-		if hasNoLint {
-			return // Пропускаем функцию, если есть //nolint:error_log_or_return
-		}
-
-		// Определяем имя ресивера (если есть)
-		var recvName string
-		if fn.Recv != nil && len(fn.Recv.List) > 0 && len(fn.Recv.List[0].Names) > 0 {
-			recvName = fn.Recv.List[0].Names[0].Name
-		}
-		if recvName == "" {
-			return // Только методы с ресивером
-		}
-
-		// Проверяем, возвращает ли функция error
-		returnsError := false
-		if fn.Type.Results != nil {
-			for _, res := range fn.Type.Results.List {
-				if types.ExprString(res.Type) == "error" {
-					returnsError = true
-					break
-				}
-			}
-		}
-
-		hasErrVar := false
-
-		// Проверяем объявления переменной err типа error только на уровне функции
-		for _, stmt := range fn.Body.List {
-			// var err error
-			if decl, ok := stmt.(*ast.DeclStmt); ok {
-				if gen, ok := decl.Decl.(*ast.GenDecl); ok && gen.Tok == token.VAR {
-					for _, spec := range gen.Specs {
-						if vs, ok := spec.(*ast.ValueSpec); ok {
-							for i, name := range vs.Names {
-								if name.Name == "err" {
-									// Явно указан тип error
-									if vs.Type != nil {
-										if ident, ok := vs.Type.(*ast.Ident); ok && ident.Name == "error" {
-											hasErrVar = true
-										}
-									} else if len(vs.Values) > i {
-										// err := ... (определение через :=)
-										typ := pass.TypesInfo.TypeOf(vs.Values[i])
-										if typ != nil && typ.String() == "error" {
-											hasErrVar = true
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			// err := ... (короткое объявление на уровне функции)
-			if assign, ok := stmt.(*ast.AssignStmt); ok && assign.Tok == token.DEFINE {
-				for _, lhs := range assign.Lhs {
-					if ident, ok := lhs.(*ast.Ident); ok && ident.Name == "err" {
-						// Для множественного присваивания нужно проверить тип переменной напрямую
-						if obj := pass.TypesInfo.Defs[ident]; obj != nil {
-							if obj.Type().String() == "error" {
-								hasErrVar = true
-							}
-						}
-					}
-				}
-			}
-		}
-
-		// Проверяем, есть ли defer <ресивер>.log.ErrorOr*(&err, ...)
-		hasDeferWithErr := false
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			deferStmt, ok := n.(*ast.DeferStmt)
-			if !ok {
-				return true
-			}
-			call, ok := deferStmt.Call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			// Проверяем, что это <ресивер>.log.ErrorOr*
-			xSel, ok := call.X.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			recvIdent, ok := xSel.X.(*ast.Ident)
-			if !ok || recvIdent.Name != recvName {
-				return true
-			}
-			if xSel.Sel.Name != "log" {
-				return true
-			}
-			if !strings.HasPrefix(call.Sel.Name, "ErrorOr") && !strings.HasPrefix(call.Sel.Name, "Error") && !strings.HasPrefix(call.Sel.Name, "Debug") {
-				return true
-			}
-			// Проверяем первый аргумент
-			if len(deferStmt.Call.Args) > 0 {
-				if starExpr, ok := deferStmt.Call.Args[0].(*ast.UnaryExpr); ok && starExpr.Op == token.AND {
-					if ident, ok := starExpr.X.(*ast.Ident); ok && ident.Name == "err" {
-						hasDeferWithErr = true
-					}
-				}
-			}
-			return true
-		})
-
-		// Нарушение: если функция не возвращает error, объявлен var err error, но нет defer с &err
-		if !returnsError && hasErrVar {
-			if !hasDeferWithErr {
-				pass.Reportf(fn.Pos(), "есть err, нет defer, нет возврата error")
-			}
-		}
-		// Нарушение: если функция возвращает error и есть defer с &err
-		if returnsError && hasDeferWithErr {
-			pass.Reportf(fn.Pos(), "возвращает error и есть defer с &err")
-		}
+		checkFunctionViolations(fn, pass, filteredFilePaths)
 	})
+
 	return nil, nil
 }
 
