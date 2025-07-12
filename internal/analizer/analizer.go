@@ -22,7 +22,7 @@ var nolint = "//nolint:" + name
 var analyzer = &analysis.Analyzer{
 	Name: name,
 	Doc:  "или логируем ошибку, или возвращаем",
-	// шаблон для проверки: <receiver>.log.ErrorOr*(&err, ...)
+	// TODO: вынести в конфиг шаблон для проверки: <receiver>.log.ErrorOr*(&err, ...)
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
