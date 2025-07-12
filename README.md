@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/error-log-or-return/error-log-or-return)](https://go.dev/doc/install)
 [![Go Report Card](https://goreportcard.com/badge/github.com/error-log-or-return/error-log-or-return)](https://goreportcard.com/report/github.com/error-log-or-return/error-log-or-return)
-[![coverage](https://img.shields.io/badge/coverage-85.2%25-brightgreen)](https://htmlpreview.github.io/?https://github.com/error-log-or-return/error-log-or-return/blob/main/.coverage/.html)
+[![coverage](https://img.shields.io/badge/coverage-78.1%25-brightgreen)](https://htmlpreview.github.io/?https://github.com/error-log-or-return/error-log-or-return/blob/main/.coverage/.html)
 [![Last Commit](https://img.shields.io/github/last-commit/error-log-or-return/error-log-or-return)](https://github.com/error-log-or-return/error-log-or-return/commits/main/)
 [![Project Status](https://img.shields.io/github/release/error-log-or-return/error-log-or-return.svg)](https://github.com/error-log-or-return/error-log-or-return/releases/latest)
 

@@ -1,0 +1,544 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>analizer: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go (80.3%)</option>
+				
+				<option value="file1">github.com/error-log-or-return/error-log-or-return/internal/analizer/init.go (72.2%)</option>
+				
+				<option value="file2">github.com/error-log-or-return/error-log-or-return/internal/config/config.go (93.3%)</option>
+				
+				<option value="file3">github.com/error-log-or-return/error-log-or-return/main.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package analizer
+
+import (
+        "fmt"
+        "go/ast"
+        "go/token"
+        "go/types"
+        "os"
+        "path/filepath"
+        "strings"
+
+        "golang.org/x/tools/go/analysis"
+        "golang.org/x/tools/go/analysis/passes/inspect"
+        "golang.org/x/tools/go/analysis/singlechecker"
+        "golang.org/x/tools/go/ast/inspector"
+)
+
+const name = "error_log_or_return"
+
+var nolint = "//nolint:" + name
+
+var analyzer = &amp;analysis.Analyzer{
+        Name: name,
+        Doc:  "или логируем ошибку, или возвращаем",
+        // шаблон для проверки: &lt;receiver&gt;.log.ErrorOr*(&amp;err, ...)
+        Requires: []*analysis.Analyzer{inspect.Analyzer},
+        Run:      run,
+}
+
+func run(pass *analysis.Pass) (interface{}, error) <span class="cov1" title="1">{
+        ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+        // Создаём кэш для путей файлов
+        pathCache := make(map[string]string)
+
+        // Фильтруем файлы согласно конфигурации
+        var filteredFiles []*ast.File
+        for _, file := range pass.Files </span><span class="cov1" title="1">{
+                filename := pass.Fset.Position(file.Pos()).Filename
+
+                // Проверяем кэш путей
+                var relPath string
+                if cached, ok := pathCache[filename]; ok </span><span class="cov0" title="0">{
+                        relPath = cached
+                }</span> else<span class="cov1" title="1"> {
+                        var err error
+                        relPath, err = filepath.Rel(basePath, filename)
+                        if err != nil </span><span class="cov0" title="0">{
+                                relPath = filename
+                        }</span>
+                        // Нормализуем разделители путей для консистентности
+                        <span class="cov1" title="1">relPath = strings.ReplaceAll(relPath, "\\", "/")
+                        pathCache[filename] = relPath</span>
+                }
+
+                // Пропускаем файлы согласно конфигурации
+                <span class="cov1" title="1">if cfg.ShouldIgnore(relPath) </span><span class="cov0" title="0">{
+                        if verbose </span><span class="cov0" title="0">{
+                                fmt.Fprintf(os.Stderr, "[DEBUG] Skipping file: %s\n", relPath)
+                        }</span>
+                        <span class="cov0" title="0">continue</span>
+                }
+                <span class="cov1" title="1">if verbose </span><span class="cov0" title="0">{
+                        fmt.Fprintf(os.Stderr, "[DEBUG] File: %s\n", relPath)
+                }</span>
+
+                <span class="cov1" title="1">filteredFiles = append(filteredFiles, file)</span>
+        }
+
+        <span class="cov1" title="1">nodeFilter := []ast.Node{(*ast.FuncDecl)(nil)}
+        ins.Preorder(nodeFilter, func(n ast.Node) </span><span class="cov5" title="10">{
+                fn, ok := n.(*ast.FuncDecl)
+                if !ok || fn.Body == nil </span><span class="cov0" title="0">{
+                        return
+                }</span>
+
+                // Проверяем, находится ли функция в одном из отфильтрованных файлов
+                <span class="cov5" title="10">fnFile := pass.Fset.Position(fn.Pos()).Filename
+                isInFilteredFile := false
+                for _, file := range filteredFiles </span><span class="cov5" title="10">{
+                        if pass.Fset.Position(file.Pos()).Filename == fnFile </span><span class="cov5" title="10">{
+                                isInFilteredFile = true
+                                break</span>
+                        }
+                }
+                <span class="cov5" title="10">if !isInFilteredFile </span><span class="cov0" title="0">{
+                        return
+                }</span>
+
+                // Проверяем, есть ли //nolint:error_log_or_return в комментариях к функции (doc или end-of-line)
+                <span class="cov5" title="10">hasNoLint := false
+                if fn.Doc != nil </span><span class="cov1" title="1">{
+                        for _, cg := range fn.Doc.List </span><span class="cov1" title="1">{
+                                if strings.Contains(cg.Text, nolint) </span><span class="cov1" title="1">{
+                                        hasNoLint = true
+                                        break</span>
+                                }
+                        }
+                }
+                // Проверяем end-of-line комментарии на строке сигнатуры функции
+                <span class="cov5" title="10">if !hasNoLint </span><span class="cov4" title="9">{
+                        var astFile *ast.File
+                        for _, f := range pass.Files </span><span class="cov4" title="9">{
+                                if fn.Pos() &gt;= f.Pos() &amp;&amp; fn.Pos() &lt;= f.End() </span><span class="cov4" title="9">{
+                                        astFile = f
+                                        break</span>
+                                }
+                        }
+                        <span class="cov4" title="9">if astFile != nil </span><span class="cov4" title="9">{
+                                file := pass.Fset.File(fn.Pos())
+                                funcLine := file.Line(fn.Pos())
+                                for _, cg := range astFile.Comments </span><span class="cov8" title="74">{
+                                        for _, c := range cg.List </span><span class="cov8" title="74">{
+                                                commentLine := file.Line(c.Pos())
+                                                if commentLine == funcLine &amp;&amp; strings.Contains(c.Text, nolint) </span><span class="cov1" title="1">{
+                                                        hasNoLint = true
+                                                        break</span>
+                                                }
+                                        }
+                                        <span class="cov8" title="74">if hasNoLint </span><span class="cov1" title="1">{
+                                                break</span>
+                                        }
+                                }
+                        }
+                }
+                <span class="cov5" title="10">if hasNoLint </span><span class="cov2" title="2">{
+                        return // Пропускаем функцию, если есть //nolint:error_log_or_return
+                }</span>
+
+                // Определяем имя ресивера (если есть)
+                <span class="cov4" title="8">var recvName string
+                if fn.Recv != nil &amp;&amp; len(fn.Recv.List) &gt; 0 &amp;&amp; len(fn.Recv.List[0].Names) &gt; 0 </span><span class="cov4" title="8">{
+                        recvName = fn.Recv.List[0].Names[0].Name
+                }</span>
+                <span class="cov4" title="8">if recvName == "" </span><span class="cov0" title="0">{
+                        return // Только методы с ресивером
+                }</span>
+
+                // Проверяем, возвращает ли функция error
+                <span class="cov4" title="8">returnsError := false
+                if fn.Type.Results != nil </span><span class="cov2" title="2">{
+                        for _, res := range fn.Type.Results.List </span><span class="cov2" title="2">{
+                                if types.ExprString(res.Type) == "error" </span><span class="cov2" title="2">{
+                                        returnsError = true
+                                        break</span>
+                                }
+                        }
+                }
+
+                <span class="cov4" title="8">hasErrVar := false
+
+                // Проверяем объявления переменной err типа error
+                ast.Inspect(fn.Body, func(n ast.Node) bool </span><span class="cov10" title="168">{
+                        // var err error
+                        if decl, ok := n.(*ast.DeclStmt); ok </span><span class="cov3" title="5">{
+                                if gen, ok := decl.Decl.(*ast.GenDecl); ok &amp;&amp; gen.Tok == token.VAR </span><span class="cov3" title="5">{
+                                        for _, spec := range gen.Specs </span><span class="cov3" title="5">{
+                                                if vs, ok := spec.(*ast.ValueSpec); ok </span><span class="cov3" title="5">{
+                                                        for i, name := range vs.Names </span><span class="cov3" title="5">{
+                                                                if name.Name == "err" </span><span class="cov3" title="5">{
+                                                                        // Явно указан тип error
+                                                                        if vs.Type != nil </span><span class="cov3" title="5">{
+                                                                                if ident, ok := vs.Type.(*ast.Ident); ok &amp;&amp; ident.Name == "error" </span><span class="cov3" title="5">{
+                                                                                        hasErrVar = true
+                                                                                }</span>
+                                                                        } else<span class="cov0" title="0"> if len(vs.Values) &gt; i </span><span class="cov0" title="0">{
+                                                                                // err := ... (определение через :=)
+                                                                                typ := pass.TypesInfo.TypeOf(vs.Values[i])
+                                                                                if typ != nil &amp;&amp; typ.String() == "error" </span><span class="cov0" title="0">{
+                                                                                        hasErrVar = true
+                                                                                }</span>
+                                                                        }
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                        // err := ... (короткое объявление)
+                        <span class="cov10" title="168">if assign, ok := n.(*ast.AssignStmt); ok &amp;&amp; assign.Tok == token.DEFINE </span><span class="cov0" title="0">{
+                                for i, lhs := range assign.Lhs </span><span class="cov0" title="0">{
+                                        if ident, ok := lhs.(*ast.Ident); ok &amp;&amp; ident.Name == "err" </span><span class="cov0" title="0">{
+                                                typ := pass.TypesInfo.TypeOf(assign.Rhs[i])
+                                                if typ != nil &amp;&amp; typ.String() == "error" </span><span class="cov0" title="0">{
+                                                        hasErrVar = true
+                                                }</span>
+                                        }
+                                }
+                        }
+                        <span class="cov10" title="168">return true</span>
+                })
+
+                // Проверяем, есть ли defer &lt;ресивер&gt;.log.ErrorOr*(&amp;err, ...)
+                <span class="cov4" title="8">hasDeferWithErr := false
+                ast.Inspect(fn.Body, func(n ast.Node) bool </span><span class="cov10" title="168">{
+                        deferStmt, ok := n.(*ast.DeferStmt)
+                        if !ok </span><span class="cov9" title="164">{
+                                return true
+                        }</span>
+                        <span class="cov3" title="4">call, ok := deferStmt.Call.Fun.(*ast.SelectorExpr)
+                        if !ok </span><span class="cov0" title="0">{
+                                return true
+                        }</span>
+                        // Проверяем, что это &lt;ресивер&gt;.log.ErrorOr*
+                        <span class="cov3" title="4">xSel, ok := call.X.(*ast.SelectorExpr)
+                        if !ok </span><span class="cov0" title="0">{
+                                return true
+                        }</span>
+                        <span class="cov3" title="4">recvIdent, ok := xSel.X.(*ast.Ident)
+                        if !ok || recvIdent.Name != recvName </span><span class="cov0" title="0">{
+                                return true
+                        }</span>
+                        <span class="cov3" title="4">if xSel.Sel.Name != "log" </span><span class="cov0" title="0">{
+                                return true
+                        }</span>
+                        <span class="cov3" title="4">if !strings.HasPrefix(call.Sel.Name, "ErrorOr") &amp;&amp; !strings.HasPrefix(call.Sel.Name, "Error") &amp;&amp; !strings.HasPrefix(call.Sel.Name, "Debug") </span><span class="cov0" title="0">{
+                                return true
+                        }</span>
+                        // Проверяем первый аргумент
+                        <span class="cov3" title="4">if len(deferStmt.Call.Args) &gt; 0 </span><span class="cov3" title="4">{
+                                if starExpr, ok := deferStmt.Call.Args[0].(*ast.UnaryExpr); ok &amp;&amp; starExpr.Op == token.AND </span><span class="cov2" title="2">{
+                                        if ident, ok := starExpr.X.(*ast.Ident); ok &amp;&amp; ident.Name == "err" </span><span class="cov2" title="2">{
+                                                hasDeferWithErr = true
+                                        }</span>
+                                }
+                        }
+                        <span class="cov3" title="4">return true</span>
+                })
+
+                // Нарушение: если функция не возвращает error, объявлен var err error, но нет defer с &amp;err
+                <span class="cov4" title="8">if !returnsError &amp;&amp; hasErrVar </span><span class="cov2" title="3">{
+                        if !hasDeferWithErr </span><span class="cov2" title="2">{
+                                pass.Reportf(fn.Pos(), "есть err, нет defer, нет возврата error")
+                        }</span>
+                }
+                // Нарушение: если функция возвращает error и есть defer с &amp;err
+                <span class="cov4" title="8">if returnsError &amp;&amp; hasDeferWithErr </span><span class="cov1" title="1">{
+                        pass.Reportf(fn.Pos(), "возвращает error и есть defer с &amp;err")
+                }</span>
+        })
+        <span class="cov1" title="1">return nil, nil</span>
+}
+
+func Run() <span class="cov0" title="0">{
+        singlechecker.Main(analyzer)
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package analizer
+
+import (
+        "fmt"
+        "os"
+        "path/filepath"
+        "strings"
+
+        "github.com/error-log-or-return/error-log-or-return/internal/config"
+)
+
+var (
+        verbose  bool
+        basePath string
+        cfg      *config.Config
+)
+
+func init() <span class="cov8" title="1">{
+        var err error
+        val := os.Getenv("ERROR_LOG_OR_RETURN_VERBOSE")
+        if val == "1" || val == "true" </span><span class="cov0" title="0">{
+                verbose = true
+        }</span>
+        <span class="cov8" title="1">basePath, err = extractBasePath(os.Args[1:])
+        if err != nil </span><span class="cov0" title="0">{
+                fmt.Fprintf(os.Stderr, "Error extracting base path: %v\n", err)
+                os.Exit(1)
+        }</span>
+        <span class="cov8" title="1">cfg, err = config.LoadConfig("")
+        if err != nil </span><span class="cov0" title="0">{
+                fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+                os.Exit(1)
+        }</span>
+}
+
+func extractBasePath(args []string) (string, error) <span class="cov8" title="1">{
+        result := "."
+        if len(args) &gt; 0 </span><span class="cov8" title="1">{
+                result = args[0]
+                result = strings.TrimSuffix(result, "/...")
+                result = strings.TrimPrefix(result, "./")
+        }</span>
+        <span class="cov8" title="1">return filepath.Abs(result)</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package config
+
+import (
+        "os"
+        "path/filepath"
+
+        "github.com/bmatcuk/doublestar/v4"
+        "gopkg.in/yaml.v3"
+)
+
+// Config contains linter settings
+type Config struct {
+        // Patterns for ignoring files and directories
+        Ignore []string `yaml:"ignore"`
+}
+
+// defaultConfig returns the default configuration
+func defaultConfig() *Config <span class="cov6" title="7">{
+        return &amp;Config{
+                Ignore: []string{
+                        "**/*_test.go",
+                        "test/**",
+                        "**/*_mock.go",
+                        "**/mock/**",
+                        "**/mocks/**",
+                },
+        }
+}</span>
+
+// findConfigFile searches for a configuration file in standard locations
+func findConfigFile() string <span class="cov5" title="4">{
+        candidates := []string{
+                ".error-log-or-return.yml",
+                "error-log-or-return.yml",
+                ".config/error-log-or-return.yml",
+                ".error-log-or-return.yaml",
+                "error-log-or-return.yaml",
+                ".config/error-log-or-return.yaml",
+        }
+
+        for _, candidate := range candidates </span><span class="cov8" title="14">{
+                if _, err := os.Stat(candidate); err == nil </span><span class="cov3" title="2">{
+                        return candidate
+                }</span>
+        }
+
+        <span class="cov3" title="2">return ""</span>
+}
+
+// matchPattern checks if a file matches the pattern
+func (c *Config) matchPattern(pattern, filePath string) bool <span class="cov10" title="22">{
+        // Normalize path - convert backslashes to forward slashes for consistent matching
+        filePath = filepath.ToSlash(filepath.Clean(filePath))
+
+        // Use doublestar for pattern matching
+        matched, _ := doublestar.Match(pattern, filePath)
+        return matched
+}</span>
+
+// ShouldIgnore checks if a file or directory should be ignored
+func (c *Config) ShouldIgnore(filePath string) bool <span class="cov6" title="7">{
+        // Normalize path - convert backslashes to forward slashes for consistent matching
+        filePath = filepath.ToSlash(filepath.Clean(filePath))
+
+        for _, pattern := range c.Ignore </span><span class="cov10" title="22">{
+                if c.matchPattern(pattern, filePath) </span><span class="cov5" title="4">{
+                        return true
+                }</span>
+        }
+
+        <span class="cov4" title="3">return false</span>
+}
+
+// LoadConfig loads configuration from a file or returns default configuration
+func LoadConfig(configPath string) (*Config, error) <span class="cov6" title="6">{
+        // If path is not specified, look in standard locations
+        if configPath == "" </span><span class="cov5" title="4">{
+                configPath = findConfigFile()
+        }</span>
+
+        // If file is not found, use default configuration
+        <span class="cov6" title="6">if configPath == "" </span><span class="cov3" title="2">{
+                return defaultConfig(), nil
+        }</span>
+
+        // Check if file exists
+        <span class="cov5" title="4">_, err := os.Stat(configPath)
+        if err != nil </span><span class="cov1" title="1">{
+                if os.IsNotExist(err) </span><span class="cov0" title="0">{
+                        return defaultConfig(), nil
+                }</span>
+                <span class="cov1" title="1">return nil, err</span>
+        }
+
+        <span class="cov4" title="3">data, err := os.ReadFile(configPath)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov4" title="3">config := defaultConfig()
+        if err := yaml.Unmarshal(data, config); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov3" title="2">return config, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package main
+
+import (
+        "fmt"
+        "os"
+        "runtime/debug"
+
+        "github.com/error-log-or-return/error-log-or-return/internal/analizer"
+)
+
+func main() <span class="cov0" title="0">{
+        for _, arg := range os.Args[1:] </span><span class="cov0" title="0">{
+                if arg == "-v" || arg == "--version" </span><span class="cov0" title="0">{
+                        info, ok := debug.ReadBuildInfo()
+                        if ok &amp;&amp; info.Main.Version != "" </span><span class="cov0" title="0">{
+                                fmt.Println("Version:", info.Main.Version)
+                        }</span> else<span class="cov0" title="0"> {
+                                fmt.Println("Version: unknown")
+                        }</span>
+                        <span class="cov0" title="0">return</span>
+                }
+        }
+        <span class="cov0" title="0">analizer.Run()</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
