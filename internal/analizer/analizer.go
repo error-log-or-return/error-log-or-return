@@ -1,9 +1,11 @@
 package analizer
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -53,7 +55,13 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		// Пропускаем файлы согласно конфигурации
 		if cfg.ShouldIgnore(relPath) {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "[DEBUG] Skipping file: %s\n", relPath)
+			}
 			continue
+		}
+		if verbose {
+			fmt.Fprintf(os.Stderr, "[DEBUG] File: %s\n", relPath)
 		}
 
 		filteredFiles = append(filteredFiles, file)
