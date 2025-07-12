@@ -1,5 +1,5 @@
-github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:30:	run		81.0%
-github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:244:	Run		0.0%
+github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:30:	run		80.3%
+github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:242:	Run		0.0%
 github.com/error-log-or-return/error-log-or-return/internal/analizer/init.go:18:	init		58.3%
 github.com/error-log-or-return/error-log-or-return/internal/analizer/init.go:36:	extractBasePath	100.0%
 github.com/error-log-or-return/error-log-or-return/internal/config/config.go:18:	defaultConfig	100.0%
@@ -8,4 +8,4 @@ github.com/error-log-or-return/error-log-or-return/internal/config/config.go:51:
 github.com/error-log-or-return/error-log-or-return/internal/config/config.go:61:	ShouldIgnore	100.0%
 github.com/error-log-or-return/error-log-or-return/internal/config/config.go:75:	LoadConfig	87.5%
 github.com/error-log-or-return/error-log-or-return/main.go:11:				main		0.0%
-total:											(statements)	78.1%
+total:											(statements)	77.6%
