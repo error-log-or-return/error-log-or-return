@@ -6,13 +6,28 @@
       "type": "shell",
       "command": "${command:go.buildTags}",
       "windows": {
-        "command": "error-log-or-return.exe"
+        "command": "error-log-or-return.exe",
+        "options": {
+          "env": {
+            "ERROR_LOG_OR_RETURN_VERBOSE": "1",
+          }
+        }
       },
       "linux": {
-        "command": "error-log-or-return"
+        "command": "error-log-or-return",
+        "options": {
+          "env": {
+            "ERROR_LOG_OR_RETURN_VERBOSE": "1",
+          }
+        }
       },
       "osx": {
-        "command": "error-log-or-return"
+        "command": "error-log-or-return",
+        "options": {
+          "env": {
+            "ERROR_LOG_OR_RETURN_VERBOSE": "1",
+          }
+        }
       },
       "args": [
         "./..."
