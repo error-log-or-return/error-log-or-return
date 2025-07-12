@@ -1,0 +1,7 @@
+{
+  "triggerTaskOnSave.tasks": {
+    "Go: Check Error Log or Return": [
+      "*.go"
+    ]
+  }
+}

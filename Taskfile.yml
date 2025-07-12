@@ -1,0 +1,67 @@
+version: "3"
+
+vars:
+  BINARY_NAME:
+    sh: |
+      if [[ "$OS" == "Windows_NT" ]] || [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]]; then
+        echo "error-log-or-return.exe"
+      else
+        echo "error-log-or-return"
+      fi
+
+tasks:
+  default:
+    # Эта задача выполняется по умолчанию при вызове 'task' без аргументов.
+    # Она скрыта из списка, так как у нее нет 'desc'.
+    cmds:
+      - task --list
+      - echo "task <name> --summary"
+    silent: true
+
+  lint:
+    desc: "run golangci-lint"
+    cmds:
+      - golangci-lint run .
+    silent: true
+
+  build:
+    desc: "build error-log-or-return linter"
+    cmds:
+      - go build -o {{.BINARY_NAME}} .
+    silent: true
+
+  test:
+    desc: "run tests"
+    cmds:
+      - go test -v
+    silent: true
+
+  # bench:
+  #   desc: "run benchmarks"
+  #   cmds:
+  #     - go test -bench=.
+  #   silent: true
+
+  clean:
+    desc: "clean build artifacts"
+    cmds:
+      - |
+        if [[ "$OS" == "Windows_NT" ]] || [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]]; then
+          del /f /q {{.BINARY_NAME}} 2>nul || true
+        else
+          rm -f {{.BINARY_NAME}}
+        fi
+    silent: true
+
+  try:
+    desc: "run error-log-or-return linter"
+    deps: [build]
+    cmds:
+      - |
+        if [[ "$OS" == "Windows_NT" ]] || [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]]; then
+          ./{{.BINARY_NAME}} ./...
+        else
+          ./{{.BINARY_NAME}} ./...
+        fi
+    silent: true
+
