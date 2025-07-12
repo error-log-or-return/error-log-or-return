@@ -55,3 +55,11 @@ func (t *TestStruct) ValidMethod3() { // нет err, но есть defer с nil
 }
 
 func (t *TestStruct) ValidMethod4() {} // нет err, нет defer, нет возврата error
+
+func fn() error { return nil }
+
+func (t *TestStruct) ValidMethod5() { // err объявлена не на уровне функции
+	if err := fn(); err != nil {
+
+	}
+}

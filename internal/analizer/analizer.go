@@ -34,7 +34,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	pathCache := make(map[string]string)
 
 	// Фильтруем файлы согласно конфигурации
-	var filteredFiles []*ast.File
+	filteredFilePaths := make(map[string]bool) // Для быстрого поиска по абсолютному пути
+
 	for _, file := range pass.Files {
 		filename := pass.Fset.Position(file.Pos()).Filename
 
@@ -53,7 +54,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			pathCache[filename] = relPath
 		}
 
-		// Пропускаем файлы согласно конфигурации
+		// Пропускаем файлы согласно конфигурации из относительного пути
 		if cfg.ShouldIgnore(relPath) {
 			if verbose {
 				fmt.Fprintf(os.Stderr, "[DEBUG] Skipping file: %s\n", relPath)
@@ -64,7 +65,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			fmt.Fprintf(os.Stderr, "[DEBUG] File: %s\n", relPath)
 		}
 
-		filteredFiles = append(filteredFiles, file)
+		filteredFilePaths[filename] = true
 	}
 
 	nodeFilter := []ast.Node{(*ast.FuncDecl)(nil)}
@@ -76,15 +77,11 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		// Проверяем, находится ли функция в одном из отфильтрованных файлов
 		fnFile := pass.Fset.Position(fn.Pos()).Filename
-		isInFilteredFile := false
-		for _, file := range filteredFiles {
-			if pass.Fset.Position(file.Pos()).Filename == fnFile {
-				isInFilteredFile = true
-				break
-			}
-		}
-		if !isInFilteredFile {
+		if !filteredFilePaths[fnFile] {
 			return
+		}
+		if verbose {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Processing function at %s\n", fnFile)
 		}
 
 		// Проверяем, есть ли //nolint:error_log_or_return в комментариях к функции (doc или end-of-line)
@@ -149,10 +146,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		hasErrVar := false
 
-		// Проверяем объявления переменной err типа error
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
+		// Проверяем объявления переменной err типа error только на уровне функции
+		for _, stmt := range fn.Body.List {
 			// var err error
-			if decl, ok := n.(*ast.DeclStmt); ok {
+			if decl, ok := stmt.(*ast.DeclStmt); ok {
 				if gen, ok := decl.Decl.(*ast.GenDecl); ok && gen.Tok == token.VAR {
 					for _, spec := range gen.Specs {
 						if vs, ok := spec.(*ast.ValueSpec); ok {
@@ -176,19 +173,20 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					}
 				}
 			}
-			// err := ... (короткое объявление)
-			if assign, ok := n.(*ast.AssignStmt); ok && assign.Tok == token.DEFINE {
-				for i, lhs := range assign.Lhs {
+			// err := ... (короткое объявление на уровне функции)
+			if assign, ok := stmt.(*ast.AssignStmt); ok && assign.Tok == token.DEFINE {
+				for _, lhs := range assign.Lhs {
 					if ident, ok := lhs.(*ast.Ident); ok && ident.Name == "err" {
-						typ := pass.TypesInfo.TypeOf(assign.Rhs[i])
-						if typ != nil && typ.String() == "error" {
-							hasErrVar = true
+						// Для множественного присваивания нужно проверить тип переменной напрямую
+						if obj := pass.TypesInfo.Defs[ident]; obj != nil {
+							if obj.Type().String() == "error" {
+								hasErrVar = true
+							}
 						}
 					}
 				}
 			}
-			return true
-		})
+		}
 
 		// Проверяем, есть ли defer <ресивер>.log.ErrorOr*(&err, ...)
 		hasDeferWithErr := false

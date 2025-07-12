@@ -33,7 +33,7 @@ tasks:
   test:
     desc: "run tests"
     cmds:
-      - go test -v
+      - go test -v ./...
     silent: true
 
   # bench:
