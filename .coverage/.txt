@@ -5,10 +5,10 @@ github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go
 github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:122:	hasErrorVariable	100.0%
 github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:132:	hasErrorInDeclStmt	61.9%
 github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:170:	hasErrorInAssignStmt	27.3%
-github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:192:	hasDeferWithErrorRef	81.2%
-github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:253:	checkFunctionViolations	88.2%
-github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:287:	run			88.9%
-github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:304:	Run			0.0%
+github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:192:	hasDeferWithErrorRef	80.6%
+github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:252:	checkFunctionViolations	88.2%
+github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:286:	run			88.9%
+github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go:303:	Run			0.0%
 github.com/error-log-or-return/error-log-or-return/internal/analizer/init.go:18:	init			58.3%
 github.com/error-log-or-return/error-log-or-return/internal/analizer/init.go:36:	extractBasePath		100.0%
 github.com/error-log-or-return/error-log-or-return/internal/config/config.go:18:	defaultConfig		100.0%
@@ -17,4 +17,4 @@ github.com/error-log-or-return/error-log-or-return/internal/config/config.go:51:
 github.com/error-log-or-return/error-log-or-return/internal/config/config.go:61:	ShouldIgnore		100.0%
 github.com/error-log-or-return/error-log-or-return/internal/config/config.go:75:	LoadConfig		87.5%
 github.com/error-log-or-return/error-log-or-return/main.go:11:				main			0.0%
-total:											(statements)		75.9%
+total:											(statements)		75.8%

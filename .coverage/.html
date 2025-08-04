@@ -55,7 +55,7 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go (76.9%)</option>
+				<option value="file0">github.com/error-log-or-return/error-log-or-return/internal/analizer/analizer.go (76.8%)</option>
 				
 				<option value="file1">github.com/error-log-or-return/error-log-or-return/internal/analizer/init.go (72.2%)</option>
 				
@@ -108,7 +108,7 @@ var nolint = "//nolint:" + name
 var analyzer = &amp;analysis.Analyzer{
         Name: name,
         Doc:  "или логируем ошибку, или возвращаем",
-        // TODO: вынести в конфиг шаблон для проверки: &lt;receiver&gt;.log.ErrorOr*(&amp;err, ...)
+        // TODO: вынести в конфиг шаблон для проверки: &lt;receiver&gt;.log.ErrorOr*(err, ...)
         Requires: []*analysis.Analyzer{inspect.Analyzer},
         Run:      run,
 }
@@ -274,12 +274,12 @@ func hasErrorInAssignStmt(stmt ast.Stmt, pass *analysis.Pass) bool <span class="
         <span class="cov0" title="0">return false</span>
 }
 
-// hasDeferWithErrorRef проверяет наличие defer с &amp;err в анонимной функции
+// hasDeferWithErrorRef проверяет наличие defer с err в анонимной функции
 func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool <span class="cov4" title="9">{
         hasDeferWithErr := false
-        ast.Inspect(fn.Body, func(n ast.Node) bool </span><span class="cov10" title="236">{
+        ast.Inspect(fn.Body, func(n ast.Node) bool </span><span class="cov10" title="232">{
                 deferStmt, ok := n.(*ast.DeferStmt)
-                if !ok </span><span class="cov9" title="232">{
+                if !ok </span><span class="cov9" title="228">{
                         return true
                 }</span>
 
@@ -290,9 +290,9 @@ func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool <span class="c
                 }</span>
 
                 // Ищем вызовы log.ErrorOr* внутри анонимной функции
-                <span class="cov3" title="4">ast.Inspect(funcLit.Body, func(n ast.Node) bool </span><span class="cov8" title="84">{
+                <span class="cov3" title="4">ast.Inspect(funcLit.Body, func(n ast.Node) bool </span><span class="cov8" title="80">{
                         call, ok := n.(*ast.CallExpr)
-                        if !ok </span><span class="cov8" title="80">{
+                        if !ok </span><span class="cov8" title="76">{
                                 return true
                         }</span>
 
@@ -322,11 +322,10 @@ func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool <span class="c
                         }</span>
 
                         <span class="cov3" title="4">if len(call.Args) &gt; 0 </span><span class="cov3" title="4">{
-                                if starExpr, ok := call.Args[0].(*ast.UnaryExpr); ok &amp;&amp; starExpr.Op == token.AND </span><span class="cov2" title="2">{
-                                        if ident, ok := starExpr.X.(*ast.Ident); ok &amp;&amp; ident.Name == "err" </span><span class="cov2" title="2">{
-                                                hasDeferWithErr = true
-                                        }</span>
-                                }
+                                // Проверяем err (прямая переменная)
+                                if ident, ok := call.Args[0].(*ast.Ident); ok &amp;&amp; ident.Name == "err" </span><span class="cov2" title="2">{
+                                        hasDeferWithErr = true
+                                }</span>
                         }
                         <span class="cov3" title="4">return true</span>
                 })
@@ -359,14 +358,14 @@ func checkFunctionViolations(fn *ast.FuncDecl, pass *analysis.Pass, filteredFile
         hasErrVar := hasErrorVariable(fn, pass)
         hasDeferWithErr := hasDeferWithErrorRef(fn, recvName)
 
-        // Нарушение: если функция не возвращает error, объявлен var err error, но нет правильного defer с &amp;err в анонимной функции
+        // Нарушение: если функция не возвращает error, объявлен var err error, но нет правильного defer с err в анонимной функции
         if !returnsErr &amp;&amp; hasErrVar &amp;&amp; !hasDeferWithErr </span><span class="cov2" title="2">{
                 pass.Reportf(fn.Pos(), "есть err, нет defer, нет возврата error")
         }</span>
 
-        // Нарушение: если функция возвращает error и есть defer с &amp;err в анонимной функции
+        // Нарушение: если функция возвращает error и есть defer с err в анонимной функции
         <span class="cov4" title="9">if returnsErr &amp;&amp; hasDeferWithErr </span><span class="cov1" title="1">{
-                pass.Reportf(fn.Pos(), "возвращает error и есть defer с &amp;err")
+                pass.Reportf(fn.Pos(), "возвращает error и есть defer с err")
         }</span>
 }
 
