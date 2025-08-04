@@ -188,7 +188,7 @@ func hasErrorInAssignStmt(stmt ast.Stmt, pass *analysis.Pass) bool {
 	return false
 }
 
-// hasDeferWithErrorRef проверяет наличие defer с &err
+// hasDeferWithErrorRef проверяет наличие defer с &err в анонимной функции
 func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool {
 	hasDeferWithErr := false
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
@@ -197,38 +197,53 @@ func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool {
 			return true
 		}
 
-		call, ok := deferStmt.Call.Fun.(*ast.SelectorExpr)
+		// Проверяем только анонимные функции
+		funcLit, ok := deferStmt.Call.Fun.(*ast.FuncLit)
 		if !ok {
-			return true
+			return true // Игнорируем прямые вызовы defer
 		}
 
-		xSel, ok := call.X.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
+		// Ищем вызовы log.ErrorOr* внутри анонимной функции
+		ast.Inspect(funcLit.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
 
-		recvIdent, ok := xSel.X.(*ast.Ident)
-		if !ok || recvIdent.Name != recvName {
-			return true
-		}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
 
-		if xSel.Sel.Name != "log" {
-			return true
-		}
+			xSel, ok := sel.X.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
 
-		if !strings.HasPrefix(call.Sel.Name, "ErrorOr") &&
-			!strings.HasPrefix(call.Sel.Name, "Error") &&
-			!strings.HasPrefix(call.Sel.Name, "Debug") {
-			return true
-		}
+			recvIdent, ok := xSel.X.(*ast.Ident)
+			if !ok || recvIdent.Name != recvName {
+				return true
+			}
 
-		if len(deferStmt.Call.Args) > 0 {
-			if starExpr, ok := deferStmt.Call.Args[0].(*ast.UnaryExpr); ok && starExpr.Op == token.AND {
-				if ident, ok := starExpr.X.(*ast.Ident); ok && ident.Name == "err" {
-					hasDeferWithErr = true
+			if xSel.Sel.Name != "log" {
+				return true
+			}
+
+			if !strings.HasPrefix(sel.Sel.Name, "ErrorOr") &&
+				!strings.HasPrefix(sel.Sel.Name, "Error") &&
+				!strings.HasPrefix(sel.Sel.Name, "Debug") {
+				return true
+			}
+
+			if len(call.Args) > 0 {
+				if starExpr, ok := call.Args[0].(*ast.UnaryExpr); ok && starExpr.Op == token.AND {
+					if ident, ok := starExpr.X.(*ast.Ident); ok && ident.Name == "err" {
+						hasDeferWithErr = true
+					}
 				}
 			}
-		}
+			return true
+		})
 		return true
 	})
 	return hasDeferWithErr
@@ -258,12 +273,12 @@ func checkFunctionViolations(fn *ast.FuncDecl, pass *analysis.Pass, filteredFile
 	hasErrVar := hasErrorVariable(fn, pass)
 	hasDeferWithErr := hasDeferWithErrorRef(fn, recvName)
 
-	// Нарушение: если функция не возвращает error, объявлен var err error, но нет defer с &err
+	// Нарушение: если функция не возвращает error, объявлен var err error, но нет правильного defer с &err в анонимной функции
 	if !returnsErr && hasErrVar && !hasDeferWithErr {
 		pass.Reportf(fn.Pos(), "есть err, нет defer, нет возврата error")
 	}
 
-	// Нарушение: если функция возвращает error и есть defer с &err
+	// Нарушение: если функция возвращает error и есть defer с &err в анонимной функции
 	if returnsErr && hasDeferWithErr {
 		pass.Reportf(fn.Pos(), "возвращает error и есть defer с &err")
 	}
