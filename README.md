@@ -17,7 +17,9 @@
 ```go
 func (s *Service) GetStatus() error {
   var err error
-  defer s.log.ErrorOrDebug(err, "")
+  defer func() {
+    s.log.ErrorOrDebug(err, "")
+  }()
   return err
 }
 ```
