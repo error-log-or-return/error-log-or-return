@@ -17,7 +17,7 @@
 ```go
 func (s *Service) GetStatus() error {
   var err error
-  defer s.log.ErrorOrDebug(&err, "")
+  defer s.log.ErrorOrDebug(err, "")
   return err
 }
 ```
@@ -78,7 +78,7 @@ The configuration file is automatically searched in the current directory (or `.
 ## 📋 Sample Output
 
 ```
-path/to/file.go:25:1: возвращает error и есть defer с &err
+path/to/file.go:25:1: возвращает error и есть defer с err
 path/to/file.go:31:1: есть err, нет defer, нет возврата error
 ```
 

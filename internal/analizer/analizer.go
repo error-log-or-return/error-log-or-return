@@ -22,7 +22,7 @@ var nolint = "//nolint:" + name
 var analyzer = &analysis.Analyzer{
 	Name: name,
 	Doc:  "или логируем ошибку, или возвращаем",
-	// TODO: вынести в конфиг шаблон для проверки: <receiver>.log.ErrorOr*(&err, ...)
+	// TODO: вынести в конфиг шаблон для проверки: <receiver>.log.ErrorOr*(err, ...)
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
@@ -188,7 +188,7 @@ func hasErrorInAssignStmt(stmt ast.Stmt, pass *analysis.Pass) bool {
 	return false
 }
 
-// hasDeferWithErrorRef проверяет наличие defer с &err в анонимной функции
+// hasDeferWithErrorRef проверяет наличие defer с err в анонимной функции
 func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool {
 	hasDeferWithErr := false
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
@@ -236,10 +236,9 @@ func hasDeferWithErrorRef(fn *ast.FuncDecl, recvName string) bool {
 			}
 
 			if len(call.Args) > 0 {
-				if starExpr, ok := call.Args[0].(*ast.UnaryExpr); ok && starExpr.Op == token.AND {
-					if ident, ok := starExpr.X.(*ast.Ident); ok && ident.Name == "err" {
-						hasDeferWithErr = true
-					}
+				// Проверяем err (прямая переменная)
+				if ident, ok := call.Args[0].(*ast.Ident); ok && ident.Name == "err" {
+					hasDeferWithErr = true
 				}
 			}
 			return true
@@ -273,14 +272,14 @@ func checkFunctionViolations(fn *ast.FuncDecl, pass *analysis.Pass, filteredFile
 	hasErrVar := hasErrorVariable(fn, pass)
 	hasDeferWithErr := hasDeferWithErrorRef(fn, recvName)
 
-	// Нарушение: если функция не возвращает error, объявлен var err error, но нет правильного defer с &err в анонимной функции
+	// Нарушение: если функция не возвращает error, объявлен var err error, но нет правильного defer с err в анонимной функции
 	if !returnsErr && hasErrVar && !hasDeferWithErr {
 		pass.Reportf(fn.Pos(), "есть err, нет defer, нет возврата error")
 	}
 
-	// Нарушение: если функция возвращает error и есть defer с &err в анонимной функции
+	// Нарушение: если функция возвращает error и есть defer с err в анонимной функции
 	if returnsErr && hasDeferWithErr {
-		pass.Reportf(fn.Pos(), "возвращает error и есть defer с &err")
+		pass.Reportf(fn.Pos(), "возвращает error и есть defer с err")
 	}
 }
 

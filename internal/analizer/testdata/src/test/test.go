@@ -2,7 +2,7 @@ package test
 
 type Logger struct{}
 
-func (l *Logger) ErrorOrDebug(err *error, msg string) {}
+func (l *Logger) ErrorOrDebug(err error, msg string) {}
 
 type TestStruct struct {
 	Field string
@@ -13,7 +13,7 @@ type TestStruct struct {
 func (t *TestStruct) IgnoredMethod1() error {
 	var err error
 	defer func() {
-		t.log.ErrorOrDebug(&err, "")
+		t.log.ErrorOrDebug(err, "")
 	}()
 	return err
 }
@@ -21,15 +21,15 @@ func (t *TestStruct) IgnoredMethod1() error {
 func (t *TestStruct) IgnoredMethod2() error { //nolint:error_log_or_return
 	var err error
 	defer func() {
-		t.log.ErrorOrDebug(&err, "")
+		t.log.ErrorOrDebug(err, "")
 	}()
 	return err
 }
 
-func (t *TestStruct) InvalidMethod1() error { // want "возвращает error и есть defer с &err"
+func (t *TestStruct) InvalidMethod1() error { // want "возвращает error и есть defer с err"
 	var err error
 	defer func() {
-		t.log.ErrorOrDebug(&err, "")
+		t.log.ErrorOrDebug(err, "")
 	}()
 	return err
 }
@@ -50,7 +50,7 @@ func (t *TestStruct) InvalidMethod3() { // want "есть err, нет defer, н�
 func (t *TestStruct) ValidMethod1() { // не возвращает error, но есть defer
 	var err error
 	defer func() {
-		t.log.ErrorOrDebug(&err, "")
+		t.log.ErrorOrDebug(err, "")
 	}()
 	_ = err
 }
